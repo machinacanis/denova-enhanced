@@ -67,7 +67,7 @@ func NewChatService() *ChatService {
 func (s *ChatService) Run(
 	ctx context.Context,
 	runner *adk.Runner,
-	sess *session.Session,
+	conversation Conversation,
 	bookService *book.Service,
 	req ChatRequest,
 	emit func(Event),
@@ -75,7 +75,7 @@ func (s *ChatService) Run(
 	originalMessage := req.Message
 	var resumeInterruption *session.Interruption
 	if shouldResumeInterruptedRequest(req.Message) {
-		resumeInterruption = sess.PendingInterruption()
+		resumeInterruption = conversation.PendingInterruption()
 		if resumeInterruption != nil {
 			req.Message = buildInterruptedResumeMessage(req.Message, resumeInterruption)
 		}
@@ -83,7 +83,7 @@ func (s *ChatService) Run(
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			log.Printf("[agent-run] panic recovered err=%v", recovered)
-			markInterruptionIfNeeded(sess, resumeInterruption, originalMessage, "", fmt.Sprint(recovered))
+			markInterruptionIfNeeded(conversation, resumeInterruption, originalMessage, "", fmt.Sprint(recovered))
 			emit(Event{Type: "error", Data: map[string]string{"message": "Agent 异常中断"}})
 		}
 	}()
@@ -105,10 +105,11 @@ func (s *ChatService) Run(
 	}
 	agentMessage = appendContextBoundaryInstruction(agentMessage)
 
-	_ = sess.Append(schema.UserMessage(originalMessage))
-	history := append([]*schema.Message(nil), sess.GetEffectiveMessages()...)
-	if len(history) > 0 {
-		history[len(history)-1] = schema.UserMessage(agentMessage)
+	history, err := conversation.PrepareMessages(originalMessage, agentMessage)
+	if err != nil {
+		log.Printf("[agent-run] prepare messages failed err=%v", err)
+		emit(Event{Type: "error", Data: map[string]string{"message": err.Error()}})
+		return
 	}
 
 	events := runner.Run(ctx, history)
@@ -118,7 +119,7 @@ func (s *ChatService) Run(
 	for {
 		if err := ctx.Err(); err != nil {
 			log.Printf("[agent-run] interrupted reason=context err=%v generated_bytes=%d", err, fullContent.Len())
-			appendAssistantIfAny(sess, &fullContent)
+			appendAssistantIfAny(conversation, &fullContent)
 			emit(Event{Type: "aborted", Data: map[string]string{}})
 			return
 		}
@@ -128,8 +129,8 @@ func (s *ChatService) Run(
 		}
 		if event.Err != nil {
 			log.Printf("[agent-run] interrupted reason=runner_error err=%v generated_bytes=%d", event.Err, fullContent.Len())
-			generated := appendAssistantIfAny(sess, &fullContent)
-			markInterruptionIfNeeded(sess, resumeInterruption, originalMessage, generated, event.Err.Error())
+			generated := appendAssistantIfAny(conversation, &fullContent)
+			markInterruptionIfNeeded(conversation, resumeInterruption, originalMessage, generated, event.Err.Error())
 			emit(Event{Type: "error", Data: map[string]string{"message": event.Err.Error()}})
 			return
 		}
@@ -165,8 +166,8 @@ func (s *ChatService) Run(
 		}
 		if mv.IsStreaming && mv.MessageStream != nil {
 			if !processStreamingEvent(mv, &fullContent, emit) {
-				generated := appendAssistantIfAny(sess, &fullContent)
-				markInterruptionIfNeeded(sess, resumeInterruption, originalMessage, generated, "stream recv error")
+				generated := appendAssistantIfAny(conversation, &fullContent)
+				markInterruptionIfNeeded(conversation, resumeInterruption, originalMessage, generated, "stream recv error")
 				return
 			}
 			continue
@@ -176,9 +177,9 @@ func (s *ChatService) Run(
 		}
 	}
 
-	appendAssistantIfAny(sess, &fullContent)
+	appendAssistantIfAny(conversation, &fullContent)
 	if resumeInterruption != nil {
-		if err := sess.ResolveInterruption(resumeInterruption.ID); err != nil {
+		if err := conversation.ResolveInterruption(resumeInterruption.ID); err != nil {
 			log.Printf("[agent-run] resolve interruption failed id=%s err=%v", resumeInterruption.ID, err)
 		}
 	}
@@ -187,22 +188,24 @@ func (s *ChatService) Run(
 }
 
 // appendAssistantIfAny 将已生成的正文持久化，避免异常中断后刷新丢失输出。
-func appendAssistantIfAny(sess *session.Session, content *strings.Builder) string {
+func appendAssistantIfAny(conversation Conversation, content *strings.Builder) string {
 	if content == nil || content.Len() == 0 {
 		return ""
 	}
 	generated := content.String()
-	_ = sess.Append(schema.AssistantMessage(generated, nil))
+	if err := conversation.AppendAssistant(generated); err != nil {
+		log.Printf("[agent-run] persist assistant message failed err=%v", err)
+	}
 	log.Printf("[agent-run] persisted assistant message bytes=%d", len(generated))
 	content.Reset()
 	return generated
 }
 
-func markInterruptionIfNeeded(sess *session.Session, resumed *session.Interruption, userMessage, assistantContent, reason string) {
+func markInterruptionIfNeeded(conversation Conversation, resumed *session.Interruption, userMessage, assistantContent, reason string) {
 	if resumed != nil {
 		return
 	}
-	if err := sess.MarkInterrupted(userMessage, assistantContent, reason); err != nil {
+	if err := conversation.MarkInterrupted(userMessage, assistantContent, reason); err != nil {
 		log.Printf("[agent-run] mark interruption failed err=%v", err)
 	}
 }

@@ -22,18 +22,19 @@ import (
 type App struct {
 	cfg *config.Config
 
-	workspace     string
-	bookState     *book.State
-	bookService   *book.Service
-	interactive   *interactive.Store
-	sessionStore  *session.Store
-	session       *session.Session
-	agentRunner   *adk.Runner
-	chatService   *agent.ChatService
-	bookRegistry  *BookRegistry
-	bookMetaStore *BookMetaStore
-	gitService    *book.GitService
-	activeTask    *Task
+	workspace             string
+	bookState             *book.State
+	bookService           *book.Service
+	interactive           *interactive.Store
+	sessionStore          *session.Store
+	session               *session.Session
+	agentRunner           *adk.Runner
+	chatService           *agent.ChatService
+	bookRegistry          *BookRegistry
+	bookMetaStore         *BookMetaStore
+	gitService            *book.GitService
+	activeTask            *Task
+	activeInteractiveTask *Task
 
 	mu sync.RWMutex
 }
@@ -211,6 +212,42 @@ func (a *App) AppendInteractiveTurn(storyID, branchID, user, narrative string) (
 		User:      user,
 		Narrative: narrative,
 	})
+}
+
+// StartInteractiveTask 启动互动模式 Agent 任务，输出写回 interactive/story。
+func (a *App) StartInteractiveTask(storyID, branchID, message string) *Task {
+	a.mu.Lock()
+	if a.agentRunner == nil || a.interactive == nil {
+		a.mu.Unlock()
+		log.Printf("[interactive-agent-task] 未选择 workspace，无法启动任务")
+		return nil
+	}
+	if a.activeInteractiveTask != nil && a.activeInteractiveTask.Status() == TaskRunning {
+		log.Printf("[interactive-agent-task] replace running task id=%s", a.activeInteractiveTask.ID())
+		a.activeInteractiveTask.Abort()
+	}
+
+	runner := a.agentRunner
+	store := a.interactive
+	bookService := a.bookService
+	chatService := a.chatService
+	a.mu.Unlock()
+
+	req := agent.ChatRequest{
+		Message: message + "\n\n请根据当前互动故事上下文继续剧情，只输出本回合 narrative 正文。",
+	}
+	conversation := newInteractiveConversation(store, storyID, branchID, message)
+	task := NewTask(func(ctx context.Context, task *Task, emit func(agent.Event)) {
+		log.Printf("[interactive-agent-task] run begin id=%s story_id=%s branch_id=%s message_len=%d", task.ID(), storyID, branchID, len(message))
+		chatService.Run(ctx, runner, conversation, bookService, req, emit)
+		log.Printf("[interactive-agent-task] run end id=%s status=%s", task.ID(), task.Status())
+	})
+
+	a.mu.Lock()
+	a.activeInteractiveTask = task
+	a.mu.Unlock()
+
+	return task
 }
 
 func (a *App) InteractiveTellers() ([]interactive.Teller, error) {
@@ -672,7 +709,7 @@ func (a *App) StartTask(req agent.ChatRequest) *Task {
 
 	task := NewTask(func(ctx context.Context, task *Task, emit func(agent.Event)) {
 		log.Printf("[agent-task] run begin id=%s message_len=%d references=%d style_references=%d style_rules=%d selections=%d plan_mode=%v", task.ID(), len(req.Message), len(req.References), len(req.StyleReferences), len(req.StyleRules), len(req.Selections), req.PlanMode)
-		chatService.Run(ctx, runner, sess, bookService, req, emit)
+		chatService.Run(ctx, runner, agent.NewSessionConversation(sess), bookService, req, emit)
 		log.Printf("[agent-task] run end id=%s status=%s", task.ID(), task.Status())
 	})
 

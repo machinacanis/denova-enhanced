@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -124,29 +122,12 @@ func (s *Server) handleInteractiveChat(ctx context.Context, c *app.RequestContex
 		return
 	}
 
-	narrative := buildInteractiveNarrative(body.Message)
-	turn, err := s.app.AppendInteractiveTurn(body.StoryID, body.Branch, body.Message, narrative)
-	if err != nil {
-		writeError(c, consts.StatusBadRequest, err.Error())
+	task := s.app.StartInteractiveTask(body.StoryID, body.Branch, body.Message)
+	if task == nil {
+		writeError(c, consts.StatusConflict, "尚未选择书籍工作区，请先在书籍管理页选择或创建书籍")
 		return
 	}
-
-	c.Response.Header.Set("Content-Type", "text/event-stream")
-	c.Response.Header.Set("Cache-Control", "no-cache")
-	c.Response.Header.Set("Connection", "keep-alive")
-	c.Response.ImmediateHeaderFlush = true
-	pr, pw := io.Pipe()
-	go func() {
-		defer pw.Close()
-		_ = writeSSE(pw, "chunk", map[string]string{"content": narrative})
-		_ = writeSSE(pw, "done", map[string]any{"turn_id": turn.ID})
-	}()
-	c.Response.SetBodyStream(pr, -1)
-}
-
-func buildInteractiveNarrative(message string) string {
-	text := strings.TrimSpace(message)
-	return fmt.Sprintf("你选择：%s\n\n故事继续推进。周围的细节随你的行动发生变化，新的线索正在浮现。", text)
+	streamTask(c, task)
 }
 
 func (s *Server) handleInteractiveTellers(ctx context.Context, c *app.RequestContext) {

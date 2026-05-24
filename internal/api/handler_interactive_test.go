@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 )
 
@@ -55,16 +54,8 @@ func TestInteractiveStoriesAndTellersAPI(t *testing.T) {
 		t.Fatalf("snapshot mismatch: %#v", snapshot)
 	}
 
-	chatResp := performJSONRequest(t, server, http.MethodPost, "/api/interactive/chat", map[string]string{
-		"mode":     "story",
-		"story_id": created.ID,
-		"message":  "我推开酒馆的门",
-	})
-	if chatResp.Code != http.StatusOK {
-		t.Fatalf("chat status = %d body=%s", chatResp.Code, chatResp.Body.String())
-	}
-	if !strings.Contains(chatResp.Body.String(), "event: chunk") || !strings.Contains(chatResp.Body.String(), "event: done") {
-		t.Fatalf("chat should stream chunk and done events: %s", chatResp.Body.String())
+	if _, err := application.AppendInteractiveTurn(created.ID, "", "我推开酒馆的门", "门后传来低沉的风声。"); err != nil {
+		t.Fatal(err)
 	}
 	snapshotResp = performJSONRequest(t, server, http.MethodGet, "/api/interactive/stories/"+created.ID+"/snapshot", nil)
 	decodeResponse(t, snapshotResp.Body.Bytes(), &snapshot)
