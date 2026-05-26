@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- WebUI：支持导入 SillyTavern 酒馆角色卡，PNG `chara` 元数据与 JSON 角色卡均可上传，后端会转换为中文 Markdown 并追加到 `setting/characters.md`，导入后自动刷新并打开角色卡片文件
 - 互动模式：新增“故事主持人”式回合裁定提示与状态空间，Agent 每轮隐式识别用户行动、绑定相关角色和世界规则、裁定后果、更新状态并制造新的可行动空间；`STATE_DELTA` 支持 `scene`、`inventory`、`resources`、`world_flags`、`rules`、`threads`、`action_space` 等路径
 - 互动模式：新增工作区级 TOML 配置 `interactive_reply_target_chars`，默认 1200 个中文字；新增可选 `interactive_max_tokens`，默认不限制以优先避免非自然截断；设置页可在「当前工作区 / 互动模式」中调整，下一轮互动对话立即生效
 - 互动模式：新增删除空剧情线能力，后端提供分支删除接口并保护主线和已有独立剧情的分支不被删除

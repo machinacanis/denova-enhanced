@@ -18,6 +18,7 @@ func (s *Server) registerRoutes(h *hertzserver.Hertz) {
 		api.POST("/workspace/rename", s.handleWorkspaceRename)
 		api.POST("/workspace/copy", s.handleWorkspaceCopy)
 		api.POST("/workspace/move", s.handleWorkspaceMove)
+		api.POST("/workspace/import-character-card", s.handleWorkspaceImportCharacterCard)
 		api.POST("/workspace/switch", s.handleWorkspaceSwitch)
 		api.GET("/workspace/current", s.handleWorkspaceCurrent)
 		api.GET("/books", s.handleBooks)

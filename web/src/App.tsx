@@ -10,6 +10,7 @@ import { HomeView } from '@/components/Home/HomeView'
 import { SettingsView } from '@/features/settings/SettingsView'
 import { InteractiveLayout } from '@/features/interactive/components/InteractiveLayout'
 import { fetchSettings } from '@/features/settings/api'
+import { importCharacterCard } from '@/lib/api'
 import { WorkspaceLayout } from '@/components/layout/workspace-layout'
 import { CommandPalette } from '@/components/common/command-palette'
 import { TooltipIconButton } from '@/components/common/tooltip-icon-button'
@@ -34,9 +35,11 @@ import {
   SearchCheck,
   Settings,
   Sparkles,
+  Upload,
   WandSparkles,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const PROJECT_VISIBLE_KEY = 'nova.layout.projectVisible'
 const INTERACTIVE_LEFT_VISIBLE_KEY = 'nova.layout.interactiveLeftVisible'
@@ -158,6 +161,7 @@ function App() {
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null)
   const [maxOpenTabs, setMaxOpenTabs] = useState<number>(MAX_OPEN_TABS_FALLBACK)
   const [sidebarView, setSidebarView] = useState<'outline' | 'files'>('outline')
+  const characterCardInputRef = useRef<HTMLInputElement>(null)
   const chatBootstrappedRef = useRef(false)
   // 记录每个 tab 最后一次激活的时间戳（递增计数器），用于 LRU 淘汰
   const tabActivationsRef = useRef<Map<string, number>>(new Map())
@@ -399,6 +403,24 @@ function App() {
     await selectFile(path)
   }, [limitTabs, selectFile, setSelectedChapterId])
 
+  const handleCharacterCardSelected = useCallback(async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const result = await importCharacterCard(file)
+      toast.success(result.message || `已导入酒馆角色卡「${result.name}」`)
+      await refresh()
+      setSidebarView('files')
+      await handleSelectFile(result.target_path)
+      notifyGitChange()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '导入酒馆角色卡失败')
+    } finally {
+      if (characterCardInputRef.current) {
+        characterCardInputRef.current.value = ''
+      }
+    }
+  }, [handleSelectFile, notifyGitChange, refresh])
+
   /** 激活某个 tab：文件 tab 触发文件加载，Home tab 仅切换激活态 */
   const handleActivateTab = useCallback((tab: Tab) => {
     const key = tabKey(tab)
@@ -567,9 +589,27 @@ function App() {
               type="button"
               onClick={refresh}
               className="rounded p-1 text-[#858b96] hover:bg-[#303238]"
+              title="刷新目录"
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={() => characterCardInputRef.current?.click()}
+              className="rounded p-1 text-[#858b96] hover:bg-[#303238]"
+              title="导入酒馆角色卡"
+              aria-label="导入酒馆角色卡"
+              disabled={!workspace}
+            >
+              <Upload className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={characterCardInputRef}
+              type="file"
+              accept=".png,.json,application/json,image/png"
+              className="hidden"
+              onChange={(e) => void handleCharacterCardSelected(e.target.files?.[0])}
+            />
             <button
               type="button"
               onClick={() => setProjectVisible(false)}

@@ -73,6 +73,13 @@ export interface WorkspaceSummary {
   chapters: ChapterSummary[]
 }
 
+export interface CharacterCardImportResult {
+  name: string
+  target_path: string
+  entry_count: number
+  message: string
+}
+
 /** 书籍元信息 */
 export interface BookMeta {
   title: string
@@ -379,6 +386,16 @@ export async function moveWorkspaceItem(req: CopyMoveRequest): Promise<FileOpera
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
+  })
+}
+
+/** 导入酒馆角色卡 PNG/JSON 到 setting/characters.md */
+export async function importCharacterCard(file: File): Promise<CharacterCardImportResult> {
+  const form = new FormData()
+  form.append('file', file)
+  return requestJSON('/api/workspace/import-character-card', {
+    method: 'POST',
+    body: form,
   })
 }
 
