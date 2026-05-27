@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { BranchTimeline } from './BranchTimeline'
 
 describe('BranchTimeline', () => {
-  it('renders a connected draggable graph canvas and selects nodes before branching', () => {
+  it('renders a custom SVG graph and selects nodes before branching', () => {
     const onSwitchBranch = vi.fn()
     const onCreateBranch = vi.fn()
 
@@ -40,12 +40,13 @@ describe('BranchTimeline', () => {
 
     const canvas = screen.getByTestId('branch-graph-canvas')
     expect(canvas.querySelector('svg path')).toBeInTheDocument()
-    expect(screen.getByText('空剧情线')).toBeInTheDocument()
+    expect(screen.getByText('折返路线')).toBeInTheDocument()
+    expect(screen.queryByText('章节')).not.toBeInTheDocument()
     expect(screen.queryByText('已选节点：')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('进入密林'))
 
-    expect(screen.getByText('已选节点')).toBeInTheDocument()
+    expect(screen.getByText(/已选节点/)).toBeInTheDocument()
     expect(onCreateBranch).not.toHaveBeenCalled()
   })
 
@@ -81,6 +82,6 @@ describe('BranchTimeline', () => {
     fireEvent.click(screen.getByText('剧情路线图'))
 
     const canvas = screen.getByTestId('branch-graph-canvas')
-    expect(canvas.querySelectorAll('svg path')).toHaveLength(2)
+    expect(canvas).toHaveAttribute('data-edge-count', '2')
   })
 })

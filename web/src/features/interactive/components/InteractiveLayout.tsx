@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpen, CheckCircle2, Layers3, Lightbulb, PenLine, ScrollText } from 'lucide-react'
+import { CheckCircle2, Layers3, Lightbulb, PenLine, ScrollText } from 'lucide-react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import type { Layout, PanelImperativeHandle, PanelSize } from 'react-resizable-panels'
 import { Badge } from '@/components/ui/badge'
@@ -43,17 +43,18 @@ export function InteractiveLayout({
     setStories(index.stories || [], index.current_story_id)
   }, [setStories])
 
-  const reloadSnapshot = useCallback(async (branchOverride?: string) => {
+  const reloadSnapshot = useCallback(async (branchOverride?: string, storyOverride?: string) => {
     const requestSeq = snapshotRequestSeqRef.current + 1
     snapshotRequestSeqRef.current = requestSeq
-    if (!currentStoryId) {
+    const storyId = storyOverride || currentStoryId
+    if (!storyId) {
       setSnapshot(null)
       return
     }
-    const branchId = branchOverride ?? (snapshotStoryIdRef.current === currentStoryId ? currentBranchId : '')
+    const branchId = branchOverride ?? (snapshotStoryIdRef.current === storyId ? currentBranchId : '')
     const [nextSnapshot, nextBranches] = await Promise.all([
-      getInteractiveSnapshot(currentStoryId, branchId),
-      getInteractiveBranches(currentStoryId),
+      getInteractiveSnapshot(storyId, branchId),
+      getInteractiveBranches(storyId),
     ])
     if (requestSeq !== snapshotRequestSeqRef.current) return
     setSnapshot(nextSnapshot)
@@ -66,7 +67,7 @@ export function InteractiveLayout({
 
   useEffect(() => {
     void reloadSnapshot()
-  }, [reloadSnapshot])
+  }, [currentStoryId])
 
   useEffect(() => {
     if (snapshot?.current_turn?.state_status !== 'pending') return
@@ -94,11 +95,12 @@ export function InteractiveLayout({
   }
 
   const handleSwitchBranch = async (branchId: string) => {
-    if (!currentStoryId) return
-    await switchInteractiveBranch(currentStoryId, branchId)
+    const storyId = currentStoryId || useInteractiveStore.getState().currentStoryId || snapshot?.story_id
+    if (!storyId) return
+    await switchInteractiveBranch(storyId, branchId)
     setCurrentBranchId(branchId)
     setSnapshot(null)
-    await reloadSnapshot(branchId)
+    await reloadSnapshot(branchId, storyId)
   }
 
   const handleCreateBranch = async (turnId: string, title: string) => {
@@ -139,8 +141,7 @@ export function InteractiveLayout({
     { label: '灵感', icon: Lightbulb },
     { label: '设定', icon: ScrollText },
     { label: '大纲', icon: Layers3 },
-    { label: '章节', icon: BookOpen },
-    { label: '正文', icon: PenLine, active: submode === 'story' },
+    { label: '剧情', icon: PenLine, active: submode === 'story' },
     { label: '检查', icon: CheckCircle2 },
   ]
 

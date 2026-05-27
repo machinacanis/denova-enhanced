@@ -76,12 +76,15 @@ describe('InteractiveLayout', () => {
       submode: 'story',
     })
     let currentBranch = 'main'
+    let switchCalls = 0
+    const snapshotBranches: string[] = []
     server.use(
       http.get('/api/interactive/stories', () => HttpResponse.json({
         current_story_id: 'st_1',
         stories: [{ id: 'st_1', title: '末日开端', origin: '', story_teller_id: 'classic', created_at: '', updated_at: '', branches: 2, events: 2 }],
       })),
       http.post('/api/interactive/stories/:id/switch-branch', async ({ request }) => {
+        switchCalls += 1
         const body = await request.json() as { branch_id: string }
         currentBranch = body.branch_id || currentBranch
         return HttpResponse.json({ status: 'ok' })
@@ -94,6 +97,7 @@ describe('InteractiveLayout', () => {
       })),
       http.get('/api/interactive/stories/:id/snapshot', ({ request }) => {
         const branch = new URL(request.url).searchParams.get('branch') || 'main'
+        snapshotBranches.push(branch)
         if (branch === 'br_alt') {
           return HttpResponse.json({
             story_id: 'st_1',
@@ -151,7 +155,9 @@ describe('InteractiveLayout', () => {
     expect(screen.getByText('林川')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /剧情路线图/ }))
-    fireEvent.click(await screen.findByText('支线'))
+    fireEvent.click(await screen.findByText('侧巷'))
+    await waitFor(() => expect(switchCalls).toBeGreaterThan(0))
+    await waitFor(() => expect(snapshotBranches).toContain('br_alt'))
 
     await screen.findByText('走向另一条巷子')
     expect(screen.getByText('巷尾传来铃声。')).toBeInTheDocument()

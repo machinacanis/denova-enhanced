@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- WebUI：互动模式底部剧情路线图回到自定义 SVG Git Graph 视图，移除章节列和自由缩放交互，支持滚动/拖动画布、默认定位当前节点、mini 缩略图快速跳转，并保留剧情节点选中、剧情线切换、空剧情线删除和从节点创建剧情线能力
 - 互动模式：story 子模式改为“两阶段状态生成”架构，主 Agent 只负责流式生成正文并先落盘 pending turn，后端异步 State Agent 基于用户行动、正文和当前快照生成 `state_delta.ops`，成功后补全同一条 story JSONL turn，失败时标记 `state_status: failed` 供前端提示
 - 互动模式：强化 story 子模式叙事提示，要求 Agent 以文字小说 RPG 节奏推进回合，让主角在叙事中自然与环境、物品和角色互动，并在回合结尾停留于开放的选择点或悬念点，避免生成封闭式 ending 或每个小动作都停下等待用户
 - WebUI：统一原生滚动条与 Radix ScrollArea 的深色主题样式，降低系统默认滚动条在设置弹窗、侧栏和对话区中的突兀感
