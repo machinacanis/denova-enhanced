@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- 游戏模式主舞台的“当前状态”改为摘要优先的自适应布局：数值指标会填满不完整末行，短字段与长文本分层排列，复杂对象收进可手动展开的结构化详情，减少空白和纵向占用；宽窄屏及浅深色主题保持一致。
+- Game Mode's main-stage Current State now uses an adaptive, summary-first layout: numeric metrics fill incomplete final rows, compact facts and long-form text use separate flows, and complex objects move behind a manual structured-details disclosure to reduce whitespace and vertical length across narrow/wide viewports and light/dark themes.
 - Beta 不兼容变更：故事导演的单份混合规划拆为分支级 `director.md`、`agent-brief.md` 与 `lore-context.md`。私密推理只保存在 `director.md`，正文 Agent 只接收公开简报与当前资料工作集；`lore-context.md` 改为可读的 Markdown，以“当前 / 候场 / 暂离场”管理生命周期。旧混合文档和自定义模板会在首次读取时迁移，并先备份到 `backups/director-doc-v2/`；依赖旧标题或两文档提交协议的自定义提示需要同步更新。
 - Beta breaking change: Split the Story Director's combined plan into branch-scoped `director.md`, `agent-brief.md`, and `lore-context.md`. Private reasoning stays in `director.md`, while the Game Agent receives only the public brief and active lore workset. `lore-context.md` is now readable Markdown organized by Active / Candidate / Offstage lifecycle. Legacy combined documents and custom templates migrate on first read after a backup under `backups/director-doc-v2/`; custom prompts tied to the old headings or two-document submission contract must be updated.
 - Beta 不兼容变更：默认 `triggered` 后台导演不再每回合运行；Game Agent 只在正文后的 `submit_choices.director_update` 中报告会实质影响后续规划的已发生事实，Director 再自行决定 `keep / patch / replan`。导演提交协议改为带 `base_hash` 的逐文件 Markdown Patch：文件独立接受和重试，finalize 后只原子替换实际变化的文件；普通更新默认只改 `agent-brief.md`，重大规划偏差才改 `director.md`，资料工作集变化才改 `lore-context.md`。`every_turn` 与 `off` 仍可显式选择；依赖旧完整文档 payload 的自定义提示或调用需要更新。

@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import i18n, { setConfiguredLocale } from '@/i18n'
 import type { Snapshot, TurnEvent } from '../../types'
 import { StoryStateLedger } from './StoryStateLedger'
 
@@ -12,6 +13,13 @@ function isVisibleElement(element: HTMLElement) {
 function visibleText(text: string) {
   return screen.getAllByText(text).find(isVisibleElement)
 }
+
+afterEach(async () => {
+  cleanup()
+  vi.restoreAllMocks()
+  setConfiguredLocale('zh-CN')
+  await i18n.changeLanguage('zh-CN')
+})
 
 describe('StoryStateLedger', () => {
   it('keeps Actor and World State as peer tabs when the stage panel is open', async () => {
@@ -25,6 +33,7 @@ describe('StoryStateLedger', () => {
 
     const tabs = screen.getByRole('tablist', { name: '当前状态对象' })
     expect(tabs).toBeInTheDocument()
+    expect(tabs).toHaveClass('story-state-ledger__tabs-list')
     expect(screen.getByRole('tab', { name: '林风' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '世界状态' })).toBeInTheDocument()
     expect(visibleText('青石镇客栈')).toBeInTheDocument()
@@ -36,6 +45,7 @@ describe('StoryStateLedger', () => {
     expect(screen.getByRole('tab', { name: '世界状态' })).toHaveAttribute('aria-selected', 'true')
     expect(visibleText('暴雨将至')).toBeInTheDocument()
     expect(screen.queryByText('青石镇客栈')).not.toBeInTheDocument()
+    expect(visibleText('Scene')?.closest('[data-state-field]')).toHaveAttribute('data-state-field-layout', 'structured')
   })
 
   it('keeps turn changes inside their fields instead of rendering a separate change module', async () => {
@@ -91,6 +101,57 @@ describe('StoryStateLedger', () => {
     expect(visibleText('当前处境')?.closest('[data-state-field]')).not.toBeNull()
   })
 
+  it('packs incomplete metric rows and separates compact facts from long-form details', () => {
+    const snapshot = storyStateSnapshot()
+    const template = snapshot.actor_state_schema?.system.templates?.[0]
+    const actors = snapshot.state.actors as Record<string, { state?: Record<string, unknown> }> | undefined
+    const protagonist = actors?.protagonist
+    const fields = template?.fields
+    if (!fields || !protagonist?.state) throw new Error('Expected Actor State fixture')
+
+    fields.push(
+      { name: '神识', id: 'sense', type: 'number', min: 0, max: 100, order: 21 },
+      { name: '精血', id: 'essence', type: 'number', min: 0, max: 100, order: 22 },
+      { name: '道心', id: 'resolve', type: 'number', min: 0, max: 100, order: 23 },
+      { name: '修为', id: 'cultivation', type: 'number', min: 0, max: 100, order: 24 },
+      { name: '宗门贡献', id: 'contribution', type: 'number', min: 0, max: 100, order: 25 },
+      { name: '宗门', id: 'sect', type: 'string', order: 31 },
+      { name: '储物袋', id: 'inventory', type: 'object', order: 50 },
+    )
+    protagonist.state.sense = 80
+    protagonist.state.essence = 95
+    protagonist.state.resolve = 45
+    protagonist.state.cultivation = 0
+    protagonist.state.contribution = 0
+    protagonist.state.sect = '散修'
+    protagonist.state['当前处境'] = '灵基刻痛已减轻约三成，但运转灵力时仍有明显不适。后天出坊市前，需要恢复至能够抵御寒剑气的程度；在那之前还要继续观察额角外伤是否彻底愈合。'
+    protagonist.state.inventory = { 下品灵石: 0, 铜牌: 1 }
+
+    render(
+      <StoryStateLedger
+        snapshot={snapshot}
+        displayPreference="expanded"
+        onDisplayPreferenceChange={() => undefined}
+      />,
+    )
+
+    const metrics = screen.getByRole('group', { name: '数值状态' })
+    expect(metrics).toHaveClass('story-state-ledger__flow-grid')
+    expect(metrics.querySelectorAll(':scope > [data-state-metric]')).toHaveLength(7)
+
+    const compactFacts = document.querySelector('[data-state-field-group="compact"]')
+    const longDetails = document.querySelector('[data-state-field-group="wide"]')
+    expect(compactFacts).not.toBeNull()
+    expect(longDetails).not.toBeNull()
+    expect(within(compactFacts as HTMLElement).getByText('年龄')).toBeInTheDocument()
+    expect(within(compactFacts as HTMLElement).getByText('宗门')).toBeInTheDocument()
+    expect(within(longDetails as HTMLElement).getByText('当前处境')).toBeInTheDocument()
+    const groupOrder = (compactFacts as HTMLElement).compareDocumentPosition(longDetails as Node)
+    expect(groupOrder & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('button', { name: '结构化详情 · 1 项' })).toHaveAttribute('data-state', 'closed')
+    expect(screen.queryByText('下品灵石')).not.toBeInTheDocument()
+  })
+
   it('renders a positive decrement amount with a minus sign', () => {
     const snapshot = storyStateSnapshot()
     const change = snapshot.current_turn?.state_delta?.actor_ops?.[0]
@@ -109,6 +170,55 @@ describe('StoryStateLedger', () => {
     const vitalityMetric = visibleText('生命')?.closest('[data-state-metric]')
     expect(vitalityMetric).not.toBeNull()
     expect(within(vitalityMetric as HTMLElement).getByText('-3')).toBeInTheDocument()
+  })
+
+  it('bounds the adaptive preview and lets the user expand or restore it for the current turn', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(720)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(320)
+
+    const { rerender } = render(
+      <StoryStateLedger
+        snapshot={storyStateSnapshot()}
+        displayPreference="preview"
+        onDisplayPreferenceChange={() => undefined}
+      />,
+    )
+
+    const region = screen.getByRole('region', { name: '当前状态' })
+    expect(region).toHaveAttribute('data-state-panel-mode', 'preview')
+    await userEvent.click(screen.getByRole('button', { name: '展开全部' }))
+    expect(region).toHaveAttribute('data-state-panel-mode', 'expanded')
+
+    await userEvent.click(screen.getByRole('button', { name: '收起为预览' }))
+    expect(region).toHaveAttribute('data-state-panel-mode', 'preview')
+
+    await userEvent.click(screen.getByRole('button', { name: '展开全部' }))
+    rerender(
+      <StoryStateLedger
+        snapshot={storyStateSnapshot('turn-2')}
+        displayPreference="preview"
+        onDisplayPreferenceChange={() => undefined}
+      />,
+    )
+    expect(region).toHaveAttribute('data-state-panel-mode', 'preview')
+  })
+
+  it('localizes the preview controls in English', async () => {
+    setConfiguredLocale('en-US')
+    await i18n.changeLanguage('en-US')
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(720)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(320)
+
+    render(
+      <StoryStateLedger
+        snapshot={storyStateSnapshot()}
+        displayPreference="preview"
+        onDisplayPreferenceChange={() => undefined}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    expect(screen.getByRole('button', { name: 'Collapse to preview' })).toBeInTheDocument()
   })
 
   it('uses the collapsed preference as a single-line default and preserves manual expansion during the same turn', async () => {
@@ -216,7 +326,7 @@ describe('StoryStateLedger', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('exposes all three display preferences from the stage', async () => {
+  it('exposes all four display preferences from the stage', async () => {
     const onChange = vi.fn()
     render(
       <StoryStateLedger
@@ -227,6 +337,7 @@ describe('StoryStateLedger', () => {
     )
 
     await userEvent.click(screen.getByRole('button', { name: '状态显示偏好' }))
+    expect(screen.getByText('默认预览')).toBeInTheDocument()
     expect(screen.getByText('默认折叠')).toBeInTheDocument()
     expect(screen.getByText('仅导演台')).toBeInTheDocument()
     await userEvent.click(screen.getByText('默认展开'))
