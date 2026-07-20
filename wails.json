@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v3.json",
+  "name": "denova-desktop",
+  "outputfilename": "Denova",
+  "frontend:dir": "web",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build",
+  "frontend:dev": "pnpm run dev",
+  "author": {
+    "name": "Denova",
+    "email": ""
+  },
+  "info": {
+    "companyName": "Denova",
+    "productName": "Denova",
+    "productVersion": "0.3.0",
+    "copyright": "Copyright © 2026 Denova",
+    "comments": "AI 创作工具桌面版"
+  }
+}
