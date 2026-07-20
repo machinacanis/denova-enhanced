@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -194,7 +196,37 @@ func newReverseProxy(target string) http.Handler {
 		log.Printf("[desktop] 代理请求失败 path=%s err=%v", r.URL.Path, err)
 		http.Error(w, "proxy error: "+err.Error(), http.StatusBadGateway)
 	}
-	return proxy
+	// WebView 传入的请求体是未知长度流（ContentLength==0），ReverseProxy 在
+	// Director 运行前就会丢弃这类 body（outreq.Body = nil），因此必须在
+	// 进入代理前先规范化请求体。
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ensureRequestBody(r)
+		proxy.ServeHTTP(w, r)
+	})
+}
+
+// ensureRequestBody 修复 WebView 传入的“未知长度”请求体。
+// Wails 资产服务器用平台流（Windows IStream / Linux GInputStream）构造请求，
+// body 是泛型 io.ReadCloser，http.NewRequestWithContext 无法推断长度，
+// ContentLength 保持 0 且请求头不含 Content-Length；而 httputil.ReverseProxy
+// 将 ContentLength==0 的请求视为无请求体（outreq.Body = nil，见
+// net/http/httputil/reverseproxy.go，且发生在 Director 之前），导致后端
+// 收到空 POST/PUT、BindJSON 失败并返回“请求参数无效”。这里在请求进入
+// 代理前将其完整读出并重写为定长缓冲，保证 body 完整转发
+// （桌面应用请求体均有上限，如封面上传 16MB，全量缓存可接受）。
+func ensureRequestBody(req *http.Request) {
+	if req.Body == nil || req.Body == http.NoBody || req.ContentLength > 0 {
+		return
+	}
+	body, err := io.ReadAll(req.Body)
+	_ = req.Body.Close()
+	if err != nil {
+		log.Printf("[desktop] 读取 WebView 请求体失败 path=%s err=%v", req.URL.Path, err)
+		return
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.Header.Set("Content-Length", strconv.Itoa(len(body)))
 }
 
 func hasVersionArg(args []string) bool {
@@ -257,6 +289,7 @@ func resolveSkillsDir(configured string) string {
 	candidates := []string{
 		"./skills",
 		bundledDir("skills"),
+		bundledOneUpDir("skills"),
 		bundledParentDir("skills"),
 	}
 	for _, c := range candidates {
@@ -267,27 +300,29 @@ func resolveSkillsDir(configured string) string {
 	return configured
 }
 
+// bundledDir 返回可执行文件同级的 name 目录（发布包布局: <bundle>/denova-desktop + <bundle>/skills）。
+// 必须用 filepath.Dir 而不是手写分隔符扫描：Windows 上 os.Executable() 返回反斜杠路径。
 func bundledDir(name string) string {
 	if exe, err := os.Executable(); err == nil {
-		return fmt.Sprintf("%s/%s", dirOf(exe), name)
+		return filepath.Join(filepath.Dir(exe), name)
+	}
+	return ""
+}
+
+// bundledOneUpDir 返回可执行文件上一级的 name 目录
+// （build-desktop.sh 布局: exe 在 <root>/dist/，资源在 <root>/skills、<root>/web/dist）。
+func bundledOneUpDir(name string) string {
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Join(filepath.Dir(exe), "..", name)
 	}
 	return ""
 }
 
 func bundledParentDir(name string) string {
 	if exe, err := os.Executable(); err == nil {
-		return fmt.Sprintf("%s/../../%s", dirOf(exe), name)
+		return filepath.Join(filepath.Dir(exe), "..", "..", name)
 	}
 	return ""
-}
-
-func dirOf(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[:i]
-		}
-	}
-	return "."
 }
 
 func existingDir(path string) string {
@@ -315,6 +350,7 @@ func resolveWebDistDir() {
 	candidates := []string{
 		"web/dist",
 		bundledDir("web/dist"),
+		bundledOneUpDir("web/dist"),
 		bundledParentDir("web/dist"),
 	}
 	for _, c := range candidates {

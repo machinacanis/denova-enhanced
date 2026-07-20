@@ -9,7 +9,7 @@
 #   - Windows: WebView2 Runtime (预装于 Win11)
 #
 # 用法:
-#   ./scripts/build-desktop.sh          # 构建桌面二进制
+#   ./scripts/build-desktop.sh          # 构建桌面二进制（dist/ 为自包含发布包）
 #   ./scripts/build-desktop.sh --dev    # 开发模式运行
 
 set -e
@@ -46,7 +46,8 @@ if [ "${MODE}" = "dev" ]; then
     exec go run ./cmd/denova-desktop --dev-mode
 else
     echo "==> 编译桌面二进制"
-    OUTPUT="dist/denova-desktop"
+    # GOEXE 在 Windows 上为 ".exe"，其他平台为空，避免手动重命名
+    OUTPUT="dist/denova-desktop$(go env GOEXE)"
     mkdir -p dist
 
     # 注入版本信息
@@ -58,7 +59,20 @@ else
         -o "${OUTPUT}" \
         ./cmd/denova-desktop
 
+    # 打包随包资源，使 dist/ 成为自包含发布包（与 build.sh / build-github-release.sh
+    # 的“资源与二进制同级”约定一致）。运行时经 exeDir/web/dist、exeDir/skills
+    # 解析（见 cmd/denova-desktop），整个目录可拷贝到任意位置运行。
+    echo "==> 打包前端产物与 skills 到 dist/"
+    rm -rf dist/web dist/skills
+    mkdir -p dist/web
+    cp -r web/dist dist/web/dist
+    cp -r skills dist/skills
+    if [ -f config.toml ]; then
+        cp config.toml dist/config.toml
+    fi
+
     echo ""
     echo "  构建完成: ${OUTPUT}"
+    echo "  发布包: dist/ (含 denova-desktop、web/dist、skills，可整体分发)"
     echo "  运行: ${OUTPUT}"
 fi

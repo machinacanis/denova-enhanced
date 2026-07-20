@@ -256,10 +256,16 @@ func resolveWebRoot() string {
 	} else if v := os.Getenv("NOVA_WEB_DIR"); v != "" {
 		candidates = append(candidates, v)
 	}
-	candidates = append(candidates, "web")
+	// 构建产物目录（web/dist）必须优先于源码目录（web）：
+	// 仓库 checkout 中 web/index.html 是 Vite 开发入口（引用 /src/main.tsx），
+	// 直接作为静态根目录会导致浏览器加载原始 TS 而白屏。
+	candidates = append(candidates, "web/dist", "web")
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
 		candidates = append(candidates,
+			filepath.Join(exeDir, "web", "dist"),
+			filepath.Join(exeDir, "..", "web", "dist"),
+			filepath.Join(exeDir, "..", "..", "web", "dist"),
 			filepath.Join(exeDir, "web"),
 			filepath.Join(exeDir, "..", "web"),
 			filepath.Join(exeDir, "..", "..", "web"),

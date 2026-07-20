@@ -21,8 +21,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Interactive resource pickers and preset editors now share accessible selection, field, section, JSON-validation, and status components; duplicate panels and helpers used only by legacy implementations were removed.
 - 自动化左侧任务目录支持按项目独立展开或折叠；折叠后仍保留运行中数量和任务数量，全局任务组使用同一交互。
 - The Automations task catalog can expand or collapse each project independently while keeping running and task counts visible; the global task group follows the same interaction.
+- `scripts/build-desktop.sh` 现在将前端构建产物（`web/dist`）、`skills/` 与 `config.toml` 一并打包进 `dist/`，与 `build.sh` / `build-github-release.sh` 的“资源与二进制同级”约定对齐；`dist/` 成为自包含发布包，可整体拷贝到任意目录运行，不再依赖项目根或启动目录。
+- `scripts/build-desktop.sh` now bundles the frontend build output (`web/dist`), `skills/`, and `config.toml` into `dist/`, matching the "assets alongside the binary" convention used by `build.sh` / `build-github-release.sh`; `dist/` is now a self-contained package that can be copied anywhere and run without depending on the project root or the launch directory.
 
 ### Fixed
+
+- 修复桌面版（Windows 尤其明显）创建书籍等所有带请求体的 POST/PUT 操作报“请求参数无效”：WebView 资产服务器传入的请求体是未知长度流（ContentLength 为 0），`httputil.ReverseProxy` 会将其视为无请求体并丢弃；桌面端反向代理现在在进入代理前完整读出请求体并以定长缓冲重写，保证创建书籍、封面上传、会话消息等操作正常。
+- Fixed "Invalid request" errors on all body-carrying POST/PUT operations in the desktop app (most visible on Windows), such as creating books: the WebView asset server delivers request bodies as unknown-length streams (ContentLength 0), which `httputil.ReverseProxy` treats as bodyless and drops; the desktop reverse proxy now buffers the body and rewrites it with an explicit length before proxying, so book creation, cover uploads, and chat messages work as expected.
+- 修复 Windows 桌面版在 `dist/` 等非项目根目录启动时白屏：可执行文件路径解析改用 `filepath.Dir`（原实现只识别 `/` 分隔符，Windows 反斜杠路径下失效），并补充 `exe 上一级/web/dist` 候选布局；静态根目录解析现在优先 `web/dist` 构建产物，不再误将 Vite 源码目录 `web/` 当作静态根导致加载原始 TS 白屏和 favicon 404。
+- Fixed the Windows desktop build showing a blank window when launched from `dist/` (or any non-project-root directory): executable-relative path resolution now uses `filepath.Dir` (the previous hand-rolled scanner only recognized `/` separators and broke on Windows backslash paths), and an `exeDir/../web/dist` candidate layout was added; static root resolution now prefers the `web/dist` build output instead of mistakenly serving the Vite source directory `web/`, which caused raw-TS loading, a blank screen, and favicon 404 errors.
+- `scripts/build-desktop.sh` 构建产物现在通过 `go env GOEXE` 自动附加 `.exe` 后缀（Windows），无需手动重命名。
+- `scripts/build-desktop.sh` now appends the `.exe` suffix automatically on Windows via `go env GOEXE`, removing the need for manual renaming.
 
 - 写作模式现在会隔离参数不是合法 JSON 的工具调用及其结果；已经保存的异常调用链也会在下次请求前被过滤，长参数则使用合法 JSON 回执保留上下文，避免会话被永久冻结。
 - Writing Mode now isolates tool calls with invalid JSON arguments and their results; previously saved malformed pairs are filtered before the next request, while large arguments use a valid JSON receipt so sessions do not become permanently frozen.
