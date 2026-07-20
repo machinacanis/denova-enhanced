@@ -17,7 +17,7 @@
 
 # 项目约定
 
-- 前后端分离架构，web 应用
+- 前后端分离架构，原web应用通过wails进行包装之后作为桌面应用
 - 不允许在任何情况下点击一级菜单的时候自动切换模式（特别是共享菜单），用户必须手动切换模式。且任何时候一级菜单只有一个亮着的，且所有菜单行为一致。
 - 所有面向用户的交互，都要支持双语（展示中文和英文）
 - 注入给模型的上下文必须有明确来源和大小上限，避免把无限增长的历史、日志或文件内容直接塞进提示词。
@@ -26,6 +26,18 @@
 - 不允许存在单项运行超过1s的低效单元测试
 - Pull Request Title 以及 Commit Message 需要是英文，不能是中文
 - 不允许把你自己创建的md文档放在项目根目录下，只能放在 docs 目录下，除非用户自己指定其他目录
+
+# 分支与代码回流（桌面 fork）
+
+本仓库是 denova 的桌面端专用 fork（`machinacanis/denova-enhanced`），与主仓库 `alfredxw/denova` 长期独立演进，不追求全量 commit 同步。
+
+- 本地 remote 约定：`origin` 指向本 fork（`machinacanis/denova-enhanced`），`upstream` 指向主仓库（`alfredxw/denova`）。
+- 默认分支为 `main`（桌面开发主线）；功能/修复用 `feature/<描述>`、`fix/<描述>`、`refactor/<描述>`、`chore/<描述>` 短期分支，合入 `main`。
+- 桌面专属代码（`cmd/denova-desktop/`、`wails.json`、`scripts/build-desktop.sh`、`web/src/components/desktop/`、`@wailsio/runtime` 依赖等）永不回流主仓库。
+- 通用改进优先 upstream-first：基于 `upstream/master` 开分支开发，PR 到主仓库，合并后再 `git merge upstream/master` 同步回 `main`。
+- 在 fork 内发现的通用修复需回流时，用 `git cherry-pick -x <commit>` 摘到基于 `upstream/master` 的分支再提 PR，`-x` 保留来源 commit。
+- 回流主仓库的 commit 必须原子化、自包含（不依赖 fork 特有上下文），Commit Message 与 PR 标题用英文。
+- 定期、选择性地 `git fetch upstream && git merge upstream/master` 减小分叉；共享文件（`go.mod`、`package.json`、`WorkbenchShell.tsx` 等）的改动保持小且局部，降低同步冲突。
 
 # 代码注意事项
 
@@ -85,3 +97,4 @@
 1. 使用 go mod tidy 确保依赖拉下来了
 2. 使用 ./scripts/build.sh 构建项目
 3. 使用 ./scripts/bootstrap.sh fe/be 启动项目
+4. 使用 ./scripts/build-desktop.sh 构建桌面应用
