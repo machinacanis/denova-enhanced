@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
@@ -23,6 +23,7 @@ import type { InteractiveSubmode } from '@/features/interactive/types'
 import { formatNumber } from './workbench-utils'
 import { formatDateTime } from '@/i18n'
 import { BookSwitcher } from './BookSwitcher'
+import { WindowControls } from '@/components/desktop/WindowControls'
 
 interface WorkbenchShellProps {
   mode: WorkspaceMode
@@ -441,8 +442,14 @@ export function WorkbenchShell({
   }
 
   const topBar = (
-    <header className="nova-topbar grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b px-3 text-xs">
-      <div className="flex min-w-0 items-center gap-2">
+    <header
+      className="nova-topbar flex h-10 shrink-0 items-center gap-2 border-b px-3 text-xs"
+      style={{ '--wails-draggable': 'drag' } as CSSProperties}
+    >
+      <div
+        className="flex min-w-0 items-center gap-2"
+        style={{ '--wails-draggable': 'no-drag' } as CSSProperties}
+      >
         <NovaBrandIcon />
         <LayoutGroup id="workbench-mode-switch">
         <div role="group" className="flex h-7 items-center rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] p-0.5" aria-label={t('workbench.modeSwitch')}>
@@ -477,9 +484,15 @@ export function WorkbenchShell({
           onManageBooks={manageBooks}
         />
       </div>
-      <div className="nova-ui-compact flex items-center justify-end gap-2 text-[var(--nova-text-faint)]">
+      {/* 中部弹性区域：桌面端作为窗口拖拽区（继承 header 的 drag），同时撑开左右两组控件 */}
+      <div className="h-full min-w-4 flex-1" />
+      <div
+        className="nova-ui-compact flex shrink-0 items-center justify-end gap-2 text-[var(--nova-text-faint)]"
+        style={{ '--wails-draggable': 'no-drag' } as CSSProperties}
+      >
         <MessageCenterButton className="h-7 w-7" onOpenAutomation={openAutomationNotification} />
         <span>{modeLabel}</span>
+        <WindowControls />
       </div>
     </header>
   )

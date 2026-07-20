@@ -62,6 +62,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.23.2
         version: 3.23.2
+      '@wailsio/runtime':
+        specifier: 3.0.0-alpha.97
+        version: 3.0.0-alpha.97
       ai:
         specifier: ^7.0.17
         version: 7.0.17(zod@3.25.76)
@@ -2050,6 +2053,9 @@ packages:
 
   '@vitest/utils@4.1.6':
     resolution: {integrity: sha512-FxIY+U81R3LGKCxaHHFRQ5+g6/iRgGLmeHWdp2Amj4ljQRrEIWHmZyDfDYBRZlpyqA7qKxtS9DD1dhk8RnRIVQ==}
+
+  '@wailsio/runtime@3.0.0-alpha.97':
+    resolution: {integrity: sha512-alvEG6B0YqW7AcBcNaUWNMD9q8JWqx5AO6BPOZpijBeq4ZjhQxSom3jvvq8Z1mWSMKPEjSvlFirKIh9NLI3ajA==}
 
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
@@ -6142,6 +6148,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.6
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@wailsio/runtime@3.0.0-alpha.97': {}
 
   '@workflow/serde@4.1.0': {}
 
