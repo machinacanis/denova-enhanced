@@ -24,6 +24,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- 写作模式目录树刷新从固定每 3 秒轮询改为事件驱动按需刷新：监听 Agent 写文件后广播的 `nova:workspace-change` 事件即时刷新，轮询仅作 30 秒兆底；并增加“上一次请求未完成则跳过”守卫，消除大型作品下恒定的目录扫描开销和请求堆积。
+- Writing mode directory tree refresh is now event-driven: it listens for the `nova:workspace-change` event broadcast after Agent file writes for instant refresh, with polling only as a 30-second fallback; an in-flight request guard prevents request pile-up, eliminating the constant directory-scan overhead on large works.
+
+- 修复桌面版（Windows 尤其明显）创建书籍等所有带请求体的 POST/PUT 操作报“请求参数无效”：WebView 资产服务器传入的请求体是未知长度流（ContentLength 为 0），`httputil.ReverseProxy` 会将其视为无请求体并丢弃；桌面端反向代理现在在进入代理前完整读出请求体并以定长缓冲重写，保证创建书籍、封面上传、会话消息等操作正常。
+- Fixed "Invalid request" errors on all body-carrying POST/PUT operations in the desktop app (most visible on Windows), such as creating books: the WebView asset server delivers request bodies as unknown-length streams (ContentLength 0), which `httputil.ReverseProxy` treats as bodyless and drops; the desktop reverse proxy now buffers the body and rewrites it with an explicit length before proxying, so book creation, cover uploads, and chat messages work as expected.
+- 修复 Windows 桌面版在 `dist/` 等非项目根目录启动时白屏：可执行文件路径解析改用 `filepath.Dir`（原实现只识别 `/` 分隔符，Windows 反斜杠路径下失效），并补充 `exe 上一级/web/dist` 候选布局；静态根目录解析现在优先 `web/dist` 构建产物，不再误将 Vite 源码目录 `web/` 当作静态根导致加载原始 TS 白屏和 favicon 404。
+- Fixed the Windows desktop build showing a blank window when launched from `dist/` (or any non-project-root directory): executable-relative path resolution now uses `filepath.Dir` (the previous hand-rolled scanner only recognized `/` separators and broke on Windows backslash paths), and an `exeDir/../web/dist` candidate layout was added; static root resolution now prefers the `web/dist` build output instead of mistakenly serving the Vite source directory `web/`, which caused raw-TS loading, a blank screen, and favicon 404 errors.
+- `scripts/build-desktop.sh` 构建产物现在通过 `go env GOEXE` 自动附加 `.exe` 后缀（Windows），无需手动重命名。
+- `scripts/build-desktop.sh` now appends the `.exe` suffix automatically on Windows via `go env GOEXE`, removing the need for manual renaming.
 - Agent 流式输出期间，文本和工具参数增量现在通过 requestAnimationFrame 批量合并为每帧一次状态更新，纯文本追加路径跳过全量归一化；长会话流式输出时 UI 主线程不再被每秒数十次的全量消息数组重建占满，输入框、滚动和按钮响应性显著改善。
 - Agent streaming output now batches text and tool-args deltas via requestAnimationFrame into one state update per frame, skipping full normalization on pure text append paths; the UI main thread is no longer saturated by dozens of full message-array rebuilds per second during long conversations, significantly improving input, scroll, and button responsiveness.
 - 修复 Agent `prefill failed: unexpected control character ... char 2000`：JSON 形态 tool result 不再按默认 2000 字硬截断并拼接换行 marker。
