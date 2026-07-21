@@ -222,8 +222,15 @@ export function stableStringifySettings(settings: Settings): string {
 function sortForStableStringify(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortForStableStringify)
   if (!value || typeof value !== 'object') return value
-  return Object.keys(value as Record<string, unknown>).sort().reduce<Record<string, unknown>>((acc, key) => {
-    acc[key] = sortForStableStringify((value as Record<string, unknown>)[key])
+  const source = value as Record<string, unknown>
+  return Object.keys(source).sort().reduce<Record<string, unknown>>((acc, key) => {
+    const fieldValue = source[key]
+    // Treat null and '' as equivalent to absent — the Go backend omits them
+    // via omitempty, so the server response never contains these values.
+    // Without this normalization, a draft with {field: null} perpetually
+    // differs from the server baseline {}, triggering an infinite auto-save loop.
+    if (fieldValue === null || fieldValue === '') return acc
+    acc[key] = sortForStableStringify(fieldValue)
     return acc
   }, {})
 }

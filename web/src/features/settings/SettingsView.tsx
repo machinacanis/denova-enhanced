@@ -177,24 +177,24 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
     setDraft((d) => ({ ...d, [k]: v }))
 
   const setModelProfiles = (profiles: ModelProfileSettings[]) => {
-    setDraft((d) => ({
-      ...d,
-      openai_api_key: '',
-      openai_base_url: '',
-      openai_model: '',
-      openai_context_window_tokens: null,
-      model_profiles: profiles,
-    }))
+    setDraft((d) => {
+      const next = { ...d, model_profiles: profiles }
+      delete next.openai_api_key
+      delete next.openai_base_url
+      delete next.openai_model
+      delete next.openai_context_window_tokens
+      return next
+    })
   }
 
   const setImageAPIProfiles = (profiles: ImageAPIProfileSettings[]) => {
-    setDraft((d) => ({
-      ...d,
-      image_api_key: '',
-      image_api_base_url: '',
-      image_api_model: '',
-      image_api_profiles: profiles,
-    }))
+    setDraft((d) => {
+      const next = { ...d, image_api_profiles: profiles }
+      delete next.image_api_key
+      delete next.image_api_base_url
+      delete next.image_api_model
+      return next
+    })
   }
 
   const placeholderFor = (k: keyof Settings): string => {
