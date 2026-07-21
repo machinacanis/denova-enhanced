@@ -220,7 +220,7 @@ func limitContextText(content string, maxRunes int, marker string) string {
 
 func looksLikeJSONPayload(content string) bool {
 	content = strings.TrimSpace(content)
-	return strings.HasPrefix(content, "{") || strings.HasPrefix(content, "[")
+	return json.Valid([]byte(content))
 }
 
 func applyToolResultContextPolicy(messages []*schema.Message, policy ToolResultContextPolicy) []*schema.Message {
