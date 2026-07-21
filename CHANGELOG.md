@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- 写作模式目录树刷新从固定每 3 秒轮询改为事件驱动按需刷新：监听 Agent 写文件后广播的 `nova:workspace-change` 事件即时刷新，轮询仅作 30 秒兆底；并增加“上一次请求未完成则跳过”守卫，消除大型作品下恒定的目录扫描开销和请求堆积。
+- Writing mode directory tree refresh is now event-driven: it listens for the `nova:workspace-change` event broadcast after Agent file writes for instant refresh, with polling only as a 30-second fallback; an in-flight request guard prevents request pile-up, eliminating the constant directory-scan overhead on large works.
+
 - 修复桌面版（Windows 尤其明显）创建书籍等所有带请求体的 POST/PUT 操作报“请求参数无效”：WebView 资产服务器传入的请求体是未知长度流（ContentLength 为 0），`httputil.ReverseProxy` 会将其视为无请求体并丢弃；桌面端反向代理现在在进入代理前完整读出请求体并以定长缓冲重写，保证创建书籍、封面上传、会话消息等操作正常。
 - Fixed "Invalid request" errors on all body-carrying POST/PUT operations in the desktop app (most visible on Windows), such as creating books: the WebView asset server delivers request bodies as unknown-length streams (ContentLength 0), which `httputil.ReverseProxy` treats as bodyless and drops; the desktop reverse proxy now buffers the body and rewrites it with an explicit length before proxying, so book creation, cover uploads, and chat messages work as expected.
 - 修复 Windows 桌面版在 `dist/` 等非项目根目录启动时白屏：可执行文件路径解析改用 `filepath.Dir`（原实现只识别 `/` 分隔符，Windows 反斜杠路径下失效），并补充 `exe 上一级/web/dist` 候选布局；静态根目录解析现在优先 `web/dist` 构建产物，不再误将 Vite 源码目录 `web/` 当作静态根导致加载原始 TS 白屏和 favicon 404。

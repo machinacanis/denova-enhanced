@@ -23,7 +23,7 @@ export interface FileNode {
   children?: FileNode[]
 }
 
-const TREE_AUTO_REFRESH_INTERVAL_MS = 3000
+const TREE_AUTO_REFRESH_INTERVAL_MS = 30_000
 
 interface WorkspaceRefreshOptions {
   showLoading?: boolean
@@ -208,27 +208,36 @@ export function useWorkspace(options: UseWorkspaceOptions = {}) {
     void Promise.all([fetchTree(), fetchSummary()])
   }, [fetchSummary, fetchTree, resetWorkspaceState, workspace, workspaceLoaded])
 
-  // 自动刷新目录树，覆盖 AI Agent 直接写入文件后的结构变化。
+  // 自动刷新目录树：优先监听 workspace-change 事件按需刷新，轮询仅作兆底。
+  const treeInFlightRef = useRef(false)
   useEffect(() => {
     if (!autoRefreshEnabled || !workspaceLoaded || !workspace) return
     const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') {
-        const backgroundOptions = { showLoading: false, clearOnError: false }
-        void Promise.all([
-          fetchTree(backgroundOptions),
-          fetchSummary(backgroundOptions),
-        ])
-      }
+      if (document.visibilityState !== 'visible') return
+      if (treeInFlightRef.current) return
+      treeInFlightRef.current = true
+      const backgroundOptions = { showLoading: false, clearOnError: false }
+      void Promise.all([
+        fetchTree(backgroundOptions),
+        fetchSummary(backgroundOptions),
+      ]).finally(() => { treeInFlightRef.current = false })
+    }
+    const onWorkspaceChangeEvent = (rawEvent: Event) => {
+      const event = (rawEvent as CustomEvent).detail
+      if (event?.workspace && event.workspace !== workspaceRef.current) return
+      refreshIfVisible()
     }
 
     const timer = window.setInterval(refreshIfVisible, TREE_AUTO_REFRESH_INTERVAL_MS)
     window.addEventListener('focus', refreshIfVisible)
     document.addEventListener('visibilitychange', refreshIfVisible)
+    window.addEventListener('nova:workspace-change', onWorkspaceChangeEvent)
 
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('focus', refreshIfVisible)
       document.removeEventListener('visibilitychange', refreshIfVisible)
+      window.removeEventListener('nova:workspace-change', onWorkspaceChangeEvent)
     }
   }, [autoRefreshEnabled, fetchTree, fetchSummary, workspace, workspaceLoaded])
 
