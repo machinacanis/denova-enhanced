@@ -39,6 +39,15 @@
 - 回流主仓库的 commit 必须原子化、自包含（不依赖 fork 特有上下文），Commit Message 与 PR 标题用英文。
 - 定期、选择性地 `git fetch upstream && git merge upstream/master` 减小分叉；共享文件（`go.mod`、`package.json`、`WorkbenchShell.tsx` 等）的改动保持小且局部，降低同步冲突。
 
+# 性能审查与修复分支
+
+`docs/blocking-and-responsiveness-code-review.md` 记录了完整的阻塞与前端响应性审查结果（本地文件，不入库）。修复约定：
+
+- 每个修复独立开 `fix/<描述>` 分支，基于 `main`，不混合多个问题的变更。
+- 修复前后必须保证功能不受影响：后端修改跑 `go test ./internal/...`，前端修改跑 `npx vitest run`。
+- 纯共享代码的修复（不含桌面 fork 独有依赖）应标记为可回流，按 upstream-first 策略提 PR 到主仓库。
+- 审查文档中发现但不由本 fork 修复的问题，记录在审查文档中并标注已提 Issue，由原开发组决定。
+
 # 代码注意事项
 
 - goroutine 都需要 recover，避免 panic 导致整个服务崩溃
