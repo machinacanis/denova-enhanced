@@ -323,7 +323,6 @@ func TestToolResultContextContentStillTruncatesMalformedJSONLikeText(t *testing.
 	}
 }
 
-
 type recordedToolContextConversation struct {
 	Conversation
 	messages []*schema.Message
