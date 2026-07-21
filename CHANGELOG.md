@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Agent 流式输出期间，文本和工具参数增量现在通过 requestAnimationFrame 批量合并为每帧一次状态更新，纯文本追加路径跳过全量归一化；长会话流式输出时 UI 主线程不再被每秒数十次的全量消息数组重建占满，输入框、滚动和按钮响应性显著改善。
+- Agent streaming output now batches text and tool-args deltas via requestAnimationFrame into one state update per frame, skipping full normalization on pure text append paths; the UI main thread is no longer saturated by dozens of full message-array rebuilds per second during long conversations, significantly improving input, scroll, and button responsiveness.
+
 - 修复桌面版（Windows 尤其明显）创建书籍等所有带请求体的 POST/PUT 操作报“请求参数无效”：WebView 资产服务器传入的请求体是未知长度流（ContentLength 为 0），`httputil.ReverseProxy` 会将其视为无请求体并丢弃；桌面端反向代理现在在进入代理前完整读出请求体并以定长缓冲重写，保证创建书籍、封面上传、会话消息等操作正常。
 - Fixed "Invalid request" errors on all body-carrying POST/PUT operations in the desktop app (most visible on Windows), such as creating books: the WebView asset server delivers request bodies as unknown-length streams (ContentLength 0), which `httputil.ReverseProxy` treats as bodyless and drops; the desktop reverse proxy now buffers the body and rewrites it with an explicit length before proxying, so book creation, cover uploads, and chat messages work as expected.
 - 修复 Windows 桌面版在 `dist/` 等非项目根目录启动时白屏：可执行文件路径解析改用 `filepath.Dir`（原实现只识别 `/` 分隔符，Windows 反斜杠路径下失效），并补充 `exe 上一级/web/dist` 候选布局；静态根目录解析现在优先 `web/dist` 构建产物，不再误将 Vite 源码目录 `web/` 当作静态根导致加载原始 TS 白屏和 favicon 404。
