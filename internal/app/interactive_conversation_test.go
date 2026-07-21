@@ -357,3 +357,166 @@ func TestWithInteractiveNarrativeAnchorFallbacks(t *testing.T) {
 		t.Fatalf("已含锚点的事件列表必须幂等返回: %#v", again)
 	}
 }
+
+// TestInteractiveDisplayToolArgsThrottle verifies that streaming tool_args
+// deltas are throttled by byte threshold (P0-4 fix): small deltas only update
+// memory, persist happens when accumulated bytes exceed 4KB, and the final
+// turn commit captures all data regardless of throttle state.
+func TestInteractiveDisplayToolArgsThrottle(t *testing.T) {
+	workspace := t.TempDir()
+	store := interactive.NewStore(workspace)
+	story, err := store.CreateStory(interactive.CreateStoryRequest{
+		Title:         "节流测试",
+		Origin:        "主角进入洞穴",
+		StoryTellerID: "classic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := newInteractiveConversation(store, t.TempDir(), workspace, story.ID, "main", "检查石壁", 800, &config.Config{})
+
+	// Append a tool_call display event (this persists immediately as a discrete event).
+	if err := conversation.AppendDisplayEvent(session.DisplayEvent{ID: "call-1", Role: "tool_call", Name: "submit_turn", Content: "submit_turn", Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send small deltas below threshold (total < 4KB).
+	smallDelta := `{"narrative":"这是一段测试文本。"}`
+	for i := 0; i < 10; i++ {
+		if err := conversation.AppendDisplayToolArgs("call-1", "submit_turn", smallDelta); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify in-memory state accumulated all args.
+	conversation.mu.Lock()
+	inMemoryArgs := conversation.displayEvents[0].Args
+	unpersisted := conversation.displayUnpersistedBytes
+	conversation.mu.Unlock()
+
+	expectedArgs := strings.Repeat(smallDelta, 10)
+	if inMemoryArgs != expectedArgs {
+		t.Fatalf("in-memory args mismatch: got len=%d, want len=%d", len(inMemoryArgs), len(expectedArgs))
+	}
+	if unpersisted == 0 {
+		t.Fatal("unpersisted bytes should be > 0 when below threshold")
+	}
+	if unpersisted >= interactiveDisplayPersistBytes {
+		t.Fatalf("unpersisted bytes %d should be below threshold %d for 10 small deltas", unpersisted, interactiveDisplayPersistBytes)
+	}
+
+	// Send a large delta that exceeds the threshold.
+	largeDelta := strings.Repeat("长", interactiveDisplayPersistBytes)
+	if err := conversation.AppendDisplayToolArgs("call-1", "submit_turn", largeDelta); err != nil {
+		t.Fatal(err)
+	}
+
+	// After exceeding threshold, unpersisted bytes should reset to 0.
+	conversation.mu.Lock()
+	unpersistedAfter := conversation.displayUnpersistedBytes
+	fullArgs := conversation.displayEvents[0].Args
+	conversation.mu.Unlock()
+
+	if unpersistedAfter != 0 {
+		t.Fatalf("unpersisted bytes should reset to 0 after threshold persist, got %d", unpersistedAfter)
+	}
+	if fullArgs != expectedArgs+largeDelta {
+		t.Fatalf("full args mismatch after threshold: got len=%d, want len=%d", len(fullArgs), len(expectedArgs+largeDelta))
+	}
+
+	// UpdateDisplayToolResult should persist immediately (discrete event).
+	if err := conversation.UpdateDisplayToolResult("call-1", "submit_turn", "success", "回合提交成功"); err != nil {
+		t.Fatal(err)
+	}
+	conversation.mu.Lock()
+	if conversation.displayUnpersistedBytes != 0 {
+		t.Fatalf("UpdateDisplayToolResult should reset unpersisted bytes, got %d", conversation.displayUnpersistedBytes)
+	}
+	conversation.mu.Unlock()
+
+	// Commit the turn and verify all data is correctly persisted.
+	submitTestTurnResult(t, conversation, "检查石壁", "发现古老符文")
+	if err := conversation.AppendAssistantWithThinking("石壁上刻着古老的符文。", "先观察石壁纹路。"); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := store.Snapshot(story.ID, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Turns) != 1 {
+		t.Fatalf("expected 1 turn, got %d", len(snapshot.Turns))
+	}
+	events := snapshot.Turns[0].DisplayEvents
+	if len(events) != 1 {
+		t.Fatalf("expected 1 display event, got %d: %#v", len(events), events)
+	}
+	// The persisted event should have the full accumulated args.
+	if events[0].Args != expectedArgs+largeDelta {
+		t.Fatalf("persisted args mismatch: got len=%d, want len=%d", len(events[0].Args), len(expectedArgs+largeDelta))
+	}
+	if events[0].Result != "回合提交成功" || events[0].Status != "success" {
+		t.Fatalf("tool result/status mismatch: %#v", events[0])
+	}
+}
+
+// TestInteractiveDisplayEventContentThrottle verifies that streaming content
+// deltas (e.g., thinking text) are also throttled by byte threshold.
+func TestInteractiveDisplayEventContentThrottle(t *testing.T) {
+	workspace := t.TempDir()
+	store := interactive.NewStore(workspace)
+	story, err := store.CreateStory(interactive.CreateStoryRequest{
+		Title:         "内容节流",
+		Origin:        "主角探索遗迹",
+		StoryTellerID: "classic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := newInteractiveConversation(store, t.TempDir(), workspace, story.ID, "main", "观察壁画", 800, &config.Config{})
+
+	// Append a thinking display event (thinking role is persisted).
+	if err := conversation.AppendDisplayEvent(session.DisplayEvent{ID: "think-1", Role: "thinking", Content: ""}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send small content deltas below threshold.
+	smallContent := "这是一段思考内容。"
+	for i := 0; i < 5; i++ {
+		if err := conversation.AppendDisplayEventContent("think-1", "thinking", smallContent); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify in-memory state.
+	conversation.mu.Lock()
+	inMemoryContent := conversation.displayEvents[0].Content
+	unpersisted := conversation.displayUnpersistedBytes
+	conversation.mu.Unlock()
+
+	expectedContent := strings.Repeat(smallContent, 5)
+	if inMemoryContent != expectedContent {
+		t.Fatalf("in-memory content mismatch: got %q, want %q", inMemoryContent, expectedContent)
+	}
+	if unpersisted == 0 || unpersisted >= interactiveDisplayPersistBytes {
+		t.Fatalf("unpersisted bytes should be > 0 and < threshold for small deltas, got %d", unpersisted)
+	}
+
+	// Commit turn and verify content is persisted correctly.
+	submitTestTurnResult(t, conversation, "观察壁画", "发现古代文字")
+	if err := conversation.AppendAssistantWithThinking("壁画上描绘着古代仪式。", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := store.Snapshot(story.ID, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := snapshot.Turns[0].DisplayEvents
+	if len(events) != 1 {
+		t.Fatalf("expected 1 display event, got %d: %#v", len(events), events)
+	}
+	if events[0].Content != expectedContent {
+		t.Fatalf("persisted content mismatch: got %q, want %q", events[0].Content, expectedContent)
+	}
+}

@@ -26,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- 游戏模式流式叙事期间，工具参数和内容增量现在按 4KB 字节阈值节流落盘，而非每个 token 级 delta 都触发故事 JSONL 全文件重写；离散事件（工具结果、状态变更）仍立即持久化，回合提交时一次性落盘全部展示事件。长游戏单回合的累计 I/O 从 O(n²) 降至 O(n)，叙事流不再随故事体量增大而卡顿。
+- Game Mode streaming now throttles display event persistence by a 4KB byte threshold instead of rewriting the entire story JSONL file on every token-level delta; discrete events (tool results, status changes) still persist immediately, and all display events are flushed on turn commit. Cumulative I/O per turn drops from O(n²) to O(n), eliminating progressive stutter as stories grow.
+
 - 修复桌面版（Windows 尤其明显）创建书籍等所有带请求体的 POST/PUT 操作报“请求参数无效”：WebView 资产服务器传入的请求体是未知长度流（ContentLength 为 0），`httputil.ReverseProxy` 会将其视为无请求体并丢弃；桌面端反向代理现在在进入代理前完整读出请求体并以定长缓冲重写，保证创建书籍、封面上传、会话消息等操作正常。
 - Fixed "Invalid request" errors on all body-carrying POST/PUT operations in the desktop app (most visible on Windows), such as creating books: the WebView asset server delivers request bodies as unknown-length streams (ContentLength 0), which `httputil.ReverseProxy` treats as bodyless and drops; the desktop reverse proxy now buffers the body and rewrites it with an explicit length before proxying, so book creation, cover uploads, and chat messages work as expected.
 - 修复 Windows 桌面版在 `dist/` 等非项目根目录启动时白屏：可执行文件路径解析改用 `filepath.Dir`（原实现只识别 `/` 分隔符，Windows 反斜杠路径下失效），并补充 `exe 上一级/web/dist` 候选布局；静态根目录解析现在优先 `web/dist` 构建产物，不再误将 Vite 源码目录 `web/` 当作静态根导致加载原始 TS 白屏和 favicon 404。

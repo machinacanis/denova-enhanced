@@ -24,6 +24,14 @@ import (
 	"denova/internal/session"
 )
 
+// interactiveDisplayPersistBytes is the byte threshold for throttling display
+// event persistence during streaming. Mirrors the IDE mode's
+// displayToolArgsPersistBytes (session/types.go) to avoid O(n²) full-file
+// rewrites on every token-level delta. Discrete events (tool_result, status
+// change) always persist immediately; only high-frequency streaming deltas
+// (tool_args_delta, content delta) are throttled.
+const interactiveDisplayPersistBytes = 4 * 1024
+
 type interactiveConversation struct {
 	store                   *interactive.Store
 	novaDir                 string
@@ -50,6 +58,9 @@ type interactiveConversation struct {
 	directorTasks           *workspaceDirectorTaskGroup
 	directorGenerator       interactiveDirectorGenerator
 	customDirectorGenerator bool
+	// displayUnpersistedBytes tracks accumulated streaming delta bytes since
+	// the last display event persist. Used to throttle full-file rewrites.
+	displayUnpersistedBytes int
 }
 
 type interactiveDirectorGenerator func(context.Context, *config.Config, *book.State, agent.InteractiveStoryToolContext, string) (string, error)
@@ -609,6 +620,7 @@ func (c *interactiveConversation) AppendAssistantWithMetadata(content, thinking 
 		c.mu.Lock()
 		c.lastTurn = &turn
 		c.lastStateReady = turn.StateStatus == "ready"
+		c.displayUnpersistedBytes = 0
 		c.turnProtocol.markCommitted()
 		c.mu.Unlock()
 	}
@@ -701,6 +713,11 @@ func (c *interactiveConversation) AppendDisplayToolArgs(id, name, delta string) 
 	defer c.mu.Unlock()
 	if index := findInteractiveDisplayToolEventIndex(c.displayEvents, id, name); index >= 0 {
 		c.displayEvents[index].Args += delta
+		c.displayUnpersistedBytes += len(delta)
+		if c.displayUnpersistedBytes < interactiveDisplayPersistBytes {
+			return nil
+		}
+		c.displayUnpersistedBytes = 0
 		return c.persistLastTurnDisplayEventLocked(c.displayEvents[index])
 	}
 	return nil
@@ -719,6 +736,11 @@ func (c *interactiveConversation) AppendDisplayEventContent(id, role, delta stri
 	defer c.mu.Unlock()
 	if index := findInteractiveDisplayEventIndex(c.displayEvents, id, role); index >= 0 {
 		c.displayEvents[index].Content += delta
+		c.displayUnpersistedBytes += len(delta)
+		if c.displayUnpersistedBytes < interactiveDisplayPersistBytes {
+			return nil
+		}
+		c.displayUnpersistedBytes = 0
 		return c.persistLastTurnDisplayEventLocked(c.displayEvents[index])
 	}
 	return nil
@@ -794,6 +816,7 @@ func (c *interactiveConversation) UpdateDisplayToolStatus(id, name, status strin
 	defer c.mu.Unlock()
 	if index := findInteractiveDisplayToolEventIndex(c.displayEvents, id, name); index >= 0 {
 		c.displayEvents[index].Status = status
+		c.displayUnpersistedBytes = 0
 		return c.persistLastTurnDisplayEventLocked(c.displayEvents[index])
 	}
 	return nil
@@ -814,6 +837,7 @@ func (c *interactiveConversation) UpdateDisplayToolResult(id, name, status, resu
 	if index := findInteractiveDisplayToolEventIndex(c.displayEvents, id, name); index >= 0 {
 		c.displayEvents[index].Status = status
 		c.displayEvents[index].Result = result
+		c.displayUnpersistedBytes = 0
 		return c.persistLastTurnDisplayEventLocked(c.displayEvents[index])
 	}
 	return nil
