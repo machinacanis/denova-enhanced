@@ -7,9 +7,9 @@
 - 当前beta版本不需要过多考虑功能兼容性问题，以优化功能为主要目标，如果有不兼容问题，需要在变更说明里写清楚
 - 每次支持新的功能/功能较大变更时，考虑是否需要增加配置项供用户配置
 - 模块依赖需要划分清晰，尽量避免单个文件/package负责太多不同的东西，原则上如果单文件功能太复杂那么就需要拆分成多个文件放到一个子package里
-- 每次commit变更前都将变更的具体内容写在 CHANGELOG.md 中，遵循通用的 CHANGELOG 规范
+- 每次commit变更前都将变更的具体内容写在对应的 CHANGELOG 中：通用代码变更写入 `CHANGELOG.md`，fork 专属变更写入 `CHANGELOG_ENHANCED.md`，遵循通用的 CHANGELOG 规范
 - 共通的能力支持/调整需要同时考虑到写作和游戏两个模式
-- 发布版本时需要同步更新前端版本号、CHANGELOG.md 和 README.md，并创建对应 Git tag
+- 发布版本时需要同步更新前端版本号、CHANGELOG.md、CHANGELOG_ENHANCED.md 和 README.md，并创建对应 Git tag
 - 能用依赖解决方案就不要自己实现，避免重复造轮子，譬如 TipTap 编辑器，目录树，对话区域，各类常见组件等功能，多用组件库里的组件
 - 发布 github release 时，Release notes 中需要检验说明该版本更新内容，特别是用户有明显感知的功能变更与修复。
 - 系统与产品功能设计上多考虑功能是否真的有必要，新的功能是否可以被更高级的通用抽象支持，比如一般的提示词需求可以通过Skills实现，工具调用需求可以通过 Tools / Bash Execute 实现。
@@ -17,7 +17,7 @@
 
 # 项目约定
 
-- 前后端分离架构，原web应用通过wails进行包装之后作为桌面应用
+- 前后端分离架构，原denova web应用通过wails进行包装之后作为桌面应用
 - 不允许在任何情况下点击一级菜单的时候自动切换模式（特别是共享菜单），用户必须手动切换模式。且任何时候一级菜单只有一个亮着的，且所有菜单行为一致。
 - 所有面向用户的交互，都要支持双语（展示中文和英文）
 - 注入给模型的上下文必须有明确来源和大小上限，避免把无限增长的历史、日志或文件内容直接塞进提示词。
@@ -32,12 +32,35 @@
 本仓库是 denova 的桌面端专用 fork（`machinacanis/denova-enhanced`），与主仓库 `alfredxw/denova` 长期独立演进，不追求全量 commit 同步。
 
 - 本地 remote 约定：`origin` 指向本 fork（`machinacanis/denova-enhanced`），`upstream` 指向主仓库（`alfredxw/denova`）。
-- 默认分支为 `main`（桌面开发主线）；功能/修复用 `feature/<描述>`、`fix/<描述>`、`refactor/<描述>`、`chore/<描述>` 短期分支，合入 `main`。
-- 桌面专属代码（`cmd/denova-desktop/`、`wails.json`、`scripts/build-desktop.sh`、`web/src/components/desktop/`、`@wailsio/runtime` 依赖等）永不回流主仓库。
-- 通用改进优先 upstream-first：基于 `upstream/master` 开分支开发，PR 到主仓库，合并后再 `git merge upstream/master` 同步回 `main`。
+- 默认分支为 `main`（桌面开发主线）；功能/修复用 `feature/<描述>`、`fix/<描述>`、`refactor/<描述>`、`chore/<描述>` 短期分支，保持隔离，通过 PR 进入 main 分支。
+- 桌面端专属代码（`cmd/denova-desktop/`、`wails.json`、`scripts/build-desktop.sh`、`web/src/components/desktop/`、`@wailsio/runtime` 依赖等）永不回流主仓库。
 - 在 fork 内发现的通用修复需回流时，用 `git cherry-pick -x <commit>` 摘到基于 `upstream/master` 的分支再提 PR，`-x` 保留来源 commit。
 - 回流主仓库的 commit 必须原子化、自包含（不依赖 fork 特有上下文），Commit Message 与 PR 标题用英文。
 - 定期、选择性地 `git fetch upstream && git merge upstream/master` 减小分叉；共享文件（`go.mod`、`package.json`、`WorkbenchShell.tsx` 等）的改动保持小且局部，降低同步冲突。
+
+## CHANGELOG 拆分规范
+
+- `CHANGELOG.md`：记录与上游共享的通用代码变更（可回流主仓库的改动），与上游 `alfredxw/denova` 的 CHANGELOG 保持对齐。
+- `CHANGELOG_ENHANCED.md`：记录本 fork 专属的变更（桌面端、Wails 集成、fork 特有脚本等），永不回流主仓库。
+- 判断标准：变更涉及的文件/代码是否属于桌面专属代码（见上条列表）→ `CHANGELOG_ENHANCED.md`；否则 → `CHANGELOG.md`。
+- 发布桌面端版本时，Release notes 应综合两份 CHANGELOG 的内容。
+
+## 通用代码分支隔离与回流流程
+
+- 两边共用的代码修改（非桌面专属）必须独立到 `fix/<描述>`、`feature/<描述>`、`refactor/<描述>` 等短期分支中开发，不直接在 `main` 上提交。
+- 分支基于 `upstream/master` 开出，完成后先合入 `main`（enhanced 仓库实装）。
+- 合入 `main` 后，评估是否适合回流上游：若适合，基于 `upstream/master` 开新分支，`cherry-pick -x` 相关 commit 并提 PR。
+- 回流 commit 必须原子化、自包含，不依赖 fork 特有上下文，变更记录写入上游 `CHANGELOG.md`。
+- 桌面专属变更可直接在 `main` 开发，变更记录写入 `CHANGELOG_ENHANCED.md`。
+
+# 性能审查与修复分支
+
+运行审查agent时，应当在 docs/ 目录下生成审查文档，审查文档以 audit_{年:月:日:小时:分钟}_{主题}.md命名。
+
+- 每个修复独立开 `fix/<描述>` 分支，基于 `main`，不混合多个问题的变更。
+- 修复前后必须保证功能不受影响：后端修改跑 `go test ./internal/...`，前端修改跑 `npx vitest run`。
+- 纯共享代码的修复（不含桌面 fork 独有依赖）应标记为可回流。
+- 审查文档中发现但不由本 fork 修复的问题，记录在审查文档中并标注已提 Issue，由原开发组决定。
 
 # 代码注意事项
 

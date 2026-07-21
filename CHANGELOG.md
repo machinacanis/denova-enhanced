@@ -21,8 +21,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Interactive resource pickers and preset editors now share accessible selection, field, section, JSON-validation, and status components; duplicate panels and helpers used only by legacy implementations were removed.
 - 自动化左侧任务目录支持按项目独立展开或折叠；折叠后仍保留运行中数量和任务数量，全局任务组使用同一交互。
 - The Automations task catalog can expand or collapse each project independently while keeping running and task counts visible; the global task group follows the same interaction.
-- `scripts/build-desktop.sh` 现在将前端构建产物（`web/dist`）、`skills/` 与 `config.toml` 一并打包进 `dist/`，与 `build.sh` / `build-github-release.sh` 的“资源与二进制同级”约定对齐；`dist/` 成为自包含发布包，可整体拷贝到任意目录运行，不再依赖项目根或启动目录。
-- `scripts/build-desktop.sh` now bundles the frontend build output (`web/dist`), `skills/`, and `config.toml` into `dist/`, matching the "assets alongside the binary" convention used by `build.sh` / `build-github-release.sh`; `dist/` is now a self-contained package that can be copied anywhere and run without depending on the project root or the launch directory.
 
 ### Fixed
 
@@ -35,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed the Windows desktop build showing a blank window when launched from `dist/` (or any non-project-root directory): executable-relative path resolution now uses `filepath.Dir` (the previous hand-rolled scanner only recognized `/` separators and broke on Windows backslash paths), and an `exeDir/../web/dist` candidate layout was added; static root resolution now prefers the `web/dist` build output instead of mistakenly serving the Vite source directory `web/`, which caused raw-TS loading, a blank screen, and favicon 404 errors.
 - `scripts/build-desktop.sh` 构建产物现在通过 `go env GOEXE` 自动附加 `.exe` 后缀（Windows），无需手动重命名。
 - `scripts/build-desktop.sh` now appends the `.exe` suffix automatically on Windows via `go env GOEXE`, removing the need for manual renaming.
+- Agent 流式输出期间，文本和工具参数增量现在通过 requestAnimationFrame 批量合并为每帧一次状态更新，纯文本追加路径跳过全量归一化；长会话流式输出时 UI 主线程不再被每秒数十次的全量消息数组重建占满，输入框、滚动和按钮响应性显著改善。
+- Agent streaming output now batches text and tool-args deltas via requestAnimationFrame into one state update per frame, skipping full normalization on pure text append paths; the UI main thread is no longer saturated by dozens of full message-array rebuilds per second during long conversations, significantly improving input, scroll, and button responsiveness.
+- 修复 Agent `prefill failed: unexpected control character ... char 2000`：JSON 形态 tool result 不再按默认 2000 字硬截断并拼接换行 marker。
+- Fixed Agent `prefill failed: unexpected control character ... char 2000`: stop mid-cutting JSON tool results at the default 2000-rune preview with a newline marker.
 
 - 写作模式现在会隔离参数不是合法 JSON 的工具调用及其结果；已经保存的异常调用链也会在下次请求前被过滤，长参数则使用合法 JSON 回执保留上下文，避免会话被永久冻结。
 - Writing Mode now isolates tool calls with invalid JSON arguments and their results; previously saved malformed pairs are filtered before the next request, while large arguments use a valid JSON receipt so sessions do not become permanently frozen.

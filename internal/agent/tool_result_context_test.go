@@ -298,6 +298,31 @@ func TestToolResultContextKeepsLoreErrorsInsteadOfPositiveReceipt(t *testing.T) 
 	}
 }
 
+func TestToolResultContextContentDoesNotMidCutJSON(t *testing.T) {
+	raw, err := json.Marshal(map[string]any{"items": strings.Repeat("修炼境界寿元设定", 500)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := toolResultContextContent("write_file", "call-json", string(raw), ToolResultContextPolicy{PreviewChars: 2000})
+	if strings.Contains(content, "preview truncated for context") {
+		t.Fatalf("must not mid-cut JSON tool bodies: %s", content)
+	}
+	if !strings.Contains(content, "tool_result_json_preview_exceeded") {
+		t.Fatalf("oversized JSON should become placeholder: %s", content)
+	}
+}
+
+func TestToolResultContextContentStillTruncatesMalformedJSONLikeText(t *testing.T) {
+	raw := "{" + strings.Repeat("not actually json ", 200)
+	content := toolResultContextContent("write_file", "call-json-ish", raw, ToolResultContextPolicy{PreviewChars: 200})
+	if !strings.Contains(content, "preview truncated for context") {
+		t.Fatalf("malformed json-like text should keep truncation marker: %s", content)
+	}
+	if strings.Contains(content, "tool_result_json_preview_exceeded") {
+		t.Fatalf("malformed json-like text must not become a JSON placeholder: %s", content)
+	}
+}
+
 type recordedToolContextConversation struct {
 	Conversation
 	messages []*schema.Message
