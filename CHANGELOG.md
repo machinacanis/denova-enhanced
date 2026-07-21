@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Agent 流式输出期间，文本和工具参数增量现在通过 requestAnimationFrame 批量合并为每帧一次状态更新，纯文本追加路径跳过全量归一化；长会话流式输出时 UI 主线程不再被每秒数十次的全量消息数组重建占满，输入框、滚动和按钮响应性显著改善。
+- Agent streaming output now batches text and tool-args deltas via requestAnimationFrame into one state update per frame, skipping full normalization on pure text append paths; the UI main thread is no longer saturated by dozens of full message-array rebuilds per second during long conversations, significantly improving input, scroll, and button responsiveness.
 - 修复 Agent `prefill failed: unexpected control character ... char 2000`：JSON 形态 tool result 不再按默认 2000 字硬截断并拼接换行 marker。
 - Fixed Agent `prefill failed: unexpected control character ... char 2000`: stop mid-cutting JSON tool results at the default 2000-rune preview with a newline marker.
 
