@@ -42,6 +42,38 @@ describe('useWorkspace', () => {
     expect(setIntervalSpy.mock.calls.some(([, timeout]) => timeout === TREE_AUTO_REFRESH_INTERVAL_MS_FOR_TEST)).toBe(false)
   })
 
+  it('监听 nova:workspace-change 事件即时刷新目录树', async () => {
+    render(<WorkspaceHarness autoRefreshEnabled onChange={() => {}} />)
+
+    await waitFor(() => expect(apiMock.getWorkspaceTree).toHaveBeenCalledTimes(1))
+    apiMock.getWorkspaceTree.mockClear()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('nova:workspace-change', {
+        detail: { workspace: '/books/demo', paths: ['chapters/ch01.md'] },
+      }))
+    })
+
+    await waitFor(() => expect(apiMock.getWorkspaceTree).toHaveBeenCalledTimes(1))
+  })
+
+  it('忽略其他工作区的 workspace-change 事件', async () => {
+    render(<WorkspaceHarness autoRefreshEnabled onChange={() => {}} />)
+
+    await waitFor(() => expect(apiMock.getWorkspaceTree).toHaveBeenCalledTimes(1))
+    apiMock.getWorkspaceTree.mockClear()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('nova:workspace-change', {
+        detail: { workspace: '/books/other', paths: ['chapters/ch01.md'] },
+      }))
+    })
+
+    // 等待一个微任务周期，确认没有触发刷新
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+    expect(apiMock.getWorkspaceTree).not.toHaveBeenCalled()
+  })
+
   it('暴露书架与快捷切换器共用的排序模式', async () => {
     apiMock.getBookshelf.mockResolvedValue({ books: [], sort_mode: 'manual' })
 
@@ -331,4 +363,4 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-const TREE_AUTO_REFRESH_INTERVAL_MS_FOR_TEST = 3000
+const TREE_AUTO_REFRESH_INTERVAL_MS_FOR_TEST = 30_000
